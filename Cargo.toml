@@ -10,30 +10,35 @@ path = "./src/bin/main.rs"
 
 [dependencies]
 # ESP-HAL & RTOS ecosystem
-esp-hal = { version = "~1.1.0", features = ["defmt", "esp32s3", "unstable"] }
+esp-hal = { version = "~1.1.0", features = ["esp32s3", "log-04", "unstable"] }
 esp-rtos = { version = "0.3.0", features = [
-  "defmt",
   "embassy",
   "esp-alloc",
-  "esp32s3"
+  "esp32s3",
+  "log-04"
 ] }
-esp-bootloader-esp-idf = { version = "0.5.0", features = ["defmt", "esp32s3"] }
-esp-alloc = { version = "0.10.0", features = ["defmt"] }
+esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32s3", "log-04"] }
+esp-alloc = { version = "0.10.0" }
 
 # Logging & Panics
-defmt = "1.0.1"
-panic-rtt-target = { version = "0.2.0", features = ["defmt"] }
-rtt-target = { version = "0.6.2", features = ["defmt"] }
+log = "0.4.22"
+esp-println = { version = "0.13.0", features = ["esp32s3", "log"] }
+esp-backtrace = { version = "0.15.0", features = [
+  "esp32s3",
+  "panic-handler",
+  "println"
+] }
 
 # Async Runtime & Embassy Ecosystem
-embassy-executor = { version = "0.10.0", features = ["defmt"] }
-embassy-time = { version = "0.5.0", features = ["defmt"] }
+embassy-executor = { version = "0.10.0" }
+embassy-time = { version = "0.5.0" }
 embassy-sync = "0.8.0"
 embassy-futures = "0.1.2"
 
 # Embedded HAL & IO
 embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
+nb = "1.1.0"
 static_cell = "2.1.1"
 critical-section = "1.2.0"
 heapless = "0.9.3"

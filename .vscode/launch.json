@@ -7,7 +7,7 @@
       "name": "Launch (probe-rs)",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "build-debug",
-      "chip": "esp32c6",
+      "chip": "esp32s3",
       "flashingConfig": {
         "flashingEnabled": true,
         "haltAfterReset": true,
@@ -19,7 +19,7 @@
       "coreConfigs": [
         {
           "coreIndex": 0,
-          "programBinary": "target/riscv32imac-unknown-none-elf/debug/${workspaceFolderBasename}",
+          "programBinary": "target/xtensa-esp32s3-none-elf/debug/${workspaceFolderBasename}",
           "rttEnabled": true,
           "rttChannelFormats": [
             {
@@ -35,11 +35,11 @@
       "request": "attach",
       "name": "Attach (probe-rs)",
       "cwd": "${workspaceFolder}",
-      "chip": "esp32c6",
+      "chip": "esp32s3",
       "coreConfigs": [
         {
           "coreIndex": 0,
-          "programBinary": "target/riscv32imac-unknown-none-elf/debug/${workspaceFolderBasename}",
+          "programBinary": "target/xtensa-esp32s3-none-elf/debug/${workspaceFolderBasename}",
           "rttEnabled": true,
           "rttChannelFormats": [
             {

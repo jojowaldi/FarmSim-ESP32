@@ -1,23 +1,23 @@
 [package]
-name = "esp-c6-template"
+name = "esp32s3-template"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 
 [[bin]]
-name = "esp-c6-template"
+name = "esp32s3-template"
 path = "./src/bin/main.rs"
 
 [dependencies]
 # ESP-HAL & RTOS ecosystem
-esp-hal = { version = "~1.1.0", features = ["defmt", "esp32c6", "unstable"] }
+esp-hal = { version = "~1.1.0", features = ["defmt", "esp32s3", "unstable"] }
 esp-rtos = { version = "0.3.0", features = [
   "defmt",
   "embassy",
   "esp-alloc",
-  "esp32c6"
+  "esp32s3"
 ] }
-esp-bootloader-esp-idf = { version = "0.5.0", features = ["defmt", "esp32c6"] }
+esp-bootloader-esp-idf = { version = "0.5.0", features = ["defmt", "esp32s3"] }
 esp-alloc = { version = "0.10.0", features = ["defmt"] }
 
 # Logging & Panics

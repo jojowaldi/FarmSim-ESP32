@@ -5,6 +5,44 @@ use esp_hal::{
   peripherals::ADC1,
 };
 
+/// Active virtual joystick selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActiveJoystick {
+  #[default]
+  Joystick1,
+  Joystick2,
+}
+
+impl ActiveJoystick {
+  /// Toggles between Virtual Joystick 1 and Virtual Joystick 2.
+  pub fn toggle(&mut self) -> Self {
+    *self = match self {
+      ActiveJoystick::Joystick1 => ActiveJoystick::Joystick2,
+      ActiveJoystick::Joystick2 => ActiveJoystick::Joystick1,
+    };
+    *self
+  }
+
+  /// Returns the human-readable label for the active joystick.
+  pub fn label(&self) -> &'static str {
+    match self {
+      ActiveJoystick::Joystick1 => "JOYSTICK 1 (Primary)",
+      ActiveJoystick::Joystick2 => "JOYSTICK 2 (Secondary)",
+    }
+  }
+}
+
+/// Dual virtual joystick readings (one active receives physical input, inactive remains centered).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DualJoystickReading {
+  /// Currently active virtual joystick mode.
+  pub active: ActiveJoystick,
+  /// Current values for Virtual Joystick 1.
+  pub joy1: JoystickReading,
+  /// Current values for Virtual Joystick 2.
+  pub joy2: JoystickReading,
+}
+
 /// 3-Axis Joystick measurement holding calibrated millivolts and normalized -1.0..1.0 values.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JoystickReading {
@@ -78,7 +116,7 @@ pub struct JoystickConfig {
   pub z: AxisConfig,
 }
 
-/// Generic 3-Axis Joystick driver using ADC1 channels.
+/// Generic 3-Axis Joystick driver using ADC1 channels with virtual mode switching.
 pub struct Joystick<'a, PX, PY, PZ>
 where
   PX: AnalogPin + AdcChannel,
@@ -90,6 +128,7 @@ where
   pin_y: AdcPin<PY, ADC1<'a>, AdcCalCurve<ADC1<'a>>>,
   pin_z: AdcPin<PZ, ADC1<'a>, AdcCalCurve<ADC1<'a>>>,
   pub config: JoystickConfig,
+  pub active_mode: ActiveJoystick,
 }
 
 impl<'a, PX, PY, PZ> Joystick<'a, PX, PY, PZ>
@@ -134,7 +173,23 @@ where
       pin_y: cal_y,
       pin_z: cal_z,
       config,
+      active_mode: ActiveJoystick::default(),
     }
+  }
+
+  /// Toggles between Virtual Joystick 1 and Virtual Joystick 2.
+  pub fn toggle_mode(&mut self) -> ActiveJoystick {
+    self.active_mode.toggle()
+  }
+
+  /// Sets the active virtual joystick mode.
+  pub fn set_active_mode(&mut self, mode: ActiveJoystick) {
+    self.active_mode = mode;
+  }
+
+  /// Returns the currently active virtual joystick mode.
+  pub fn active_mode(&self) -> ActiveJoystick {
+    self.active_mode
   }
 
   /// Calibrates the center zero-position by averaging multiple samples at rest.
@@ -185,7 +240,7 @@ where
     )
   }
 
-  /// Reads both raw millivolts and calibrated normalized `[-1.0, 1.0]` values for X, Y, and Z.
+  /// Reads physical joystick values (raw millivolts and normalized `[-1.0, 1.0]`).
   pub fn read(&mut self) -> JoystickReading {
     let (raw_x, raw_y, raw_z) = self.read_raw_mv_averaged(4);
 
@@ -197,6 +252,97 @@ where
       y: self.config.y.normalize(raw_y),
       z: self.config.z.normalize(raw_z),
     }
+  }
+
+  /// Reads dual virtual joysticks: routes physical movement to the active joystick,
+  /// while keeping the inactive joystick at neutral center (0.0).
+  pub fn read_dual(&mut self) -> DualJoystickReading {
+    let physical = self.read();
+    let neutral = JoystickReading {
+      raw_x_mv: self.config.x.center_mv,
+      raw_y_mv: self.config.y.center_mv,
+      raw_z_mv: self.config.z.center_mv,
+      x: 0.0,
+      y: 0.0,
+      z: 0.0,
+    };
+
+    match self.active_mode {
+      ActiveJoystick::Joystick1 => DualJoystickReading {
+        active: ActiveJoystick::Joystick1,
+        joy1: physical,
+        joy2: neutral,
+      },
+      ActiveJoystick::Joystick2 => DualJoystickReading {
+        active: ActiveJoystick::Joystick2,
+        joy1: neutral,
+        joy2: physical,
+      },
+    }
+  }
+}
+
+/// Helper for debouncing a push button on a GPIO input pin.
+pub struct DebouncedButton<'a> {
+  pin: esp_hal::gpio::Input<'a>,
+  is_pressed: bool,
+  counter: u8,
+  threshold: u8,
+  active_low: bool,
+}
+
+impl<'a> DebouncedButton<'a> {
+  /// Creates a new active-low button with internal Pull-Up (e.g. Button to GND).
+  pub fn new_pullup(pin: impl esp_hal::gpio::InputPin + 'a) -> Self {
+    let in_cfg = esp_hal::gpio::InputConfig::default().with_pull(esp_hal::gpio::Pull::Up);
+    Self {
+      pin: esp_hal::gpio::Input::new(pin, in_cfg),
+      is_pressed: false,
+      counter: 0,
+      threshold: 2, // 2 consecutive scans required
+      active_low: true,
+    }
+  }
+
+  /// Creates a new active-high button with internal Pull-Down (e.g. Button to 3.3V).
+  pub fn new_pulldown(pin: impl esp_hal::gpio::InputPin + 'a) -> Self {
+    let in_cfg = esp_hal::gpio::InputConfig::default().with_pull(esp_hal::gpio::Pull::Down);
+    Self {
+      pin: esp_hal::gpio::Input::new(pin, in_cfg),
+      is_pressed: false,
+      counter: 0,
+      threshold: 2,
+      active_low: false,
+    }
+  }
+
+  /// Scans the button and returns `true` on the rising edge of a button press (just pressed).
+  pub fn update_just_pressed(&mut self) -> bool {
+    let raw_pressed = if self.active_low {
+      self.pin.is_low()
+    } else {
+      self.pin.is_high()
+    };
+
+    if raw_pressed != self.is_pressed {
+      self.counter = self.counter.saturating_add(1);
+      if self.counter >= self.threshold {
+        self.counter = 0;
+        self.is_pressed = raw_pressed;
+        if self.is_pressed {
+          return true;
+        }
+      }
+    } else {
+      self.counter = 0;
+    }
+
+    false
+  }
+
+  /// Returns whether the button is currently held down.
+  pub fn is_held(&self) -> bool {
+    self.is_pressed
   }
 }
 

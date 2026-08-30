@@ -12,12 +12,13 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
-use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::peripherals::Peripherals;
 use esp_hal::timer::timg::{MwdtStage, TimerGroup};
 use log::info;
-
-use esp32s3_template::joystick::Joystick;
+use esp32s3_template::{
+  joystick::{ActiveJoystick, DebouncedButton, Joystick},
+  matrix::{KeyEvent, MatrixKeypad4x4},
+};
 
 // App descriptor required by esp-idf bootloader
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -43,10 +44,6 @@ async fn main(_spawner: Spawner) -> ! {
   wdt0.enable();
   wdt0.set_timeout(MwdtStage::Stage0, esp_hal::time::Duration::from_secs(30));
 
-  // Initialize on-board LED (GPIO8 on ESP32-S3 Super-Mini)
-  let mut led = Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
-  let mut led_state = false;
-
   // Initialize 3-axis Joystick on ADC1 (X=GPIO1, Y=GPIO2, Z=GPIO4)
   let mut joystick = Joystick::new(
     peripherals.ADC1,
@@ -55,15 +52,32 @@ async fn main(_spawner: Spawner) -> ! {
     peripherals.GPIO4,
   );
 
-  // Calibrate center position in rest mode (64 samples)
+  // Calibrate joystick center in rest mode (64 samples)
   info!("Calibrating joystick center (keep joystick at rest)...");
   joystick.calibrate_center(64);
   info!(
-    "Calibration complete! Centers: X={} mV, Y={} mV, Z={} mV",
+    "Joystick calibrated! Centers: X={} mV, Y={} mV, Z={} mV",
     joystick.config.x.center_mv,
     joystick.config.y.center_mv,
     joystick.config.z.center_mv,
   );
+
+  // Initialize Mode Switch Button on GPIO 13 (with internal Pull-Up to GND)
+  let mut switch_button = DebouncedButton::new_pullup(peripherals.GPIO13);
+  info!("Joystick Switch Button initialized on GPIO 13 (Press to toggle J1 <-> J2)");
+
+  // Initialize 4x4 Matrix Keypad (Rows: 5,6,7,8 | Cols: 9,10,11,12)
+  let mut keypad = MatrixKeypad4x4::new(
+    peripherals.GPIO5,
+    peripherals.GPIO6,
+    peripherals.GPIO7,
+    peripherals.GPIO8,
+    peripherals.GPIO9,
+    peripherals.GPIO10,
+    peripherals.GPIO11,
+    peripherals.GPIO12,
+  );
+  info!("4x4 Matrix Keypad initialized (Rows: 5, 6, 7, 8 | Cols: 9, 10, 11, 12)");
 
   let mut tick_counter: u32 = 0;
 
@@ -71,25 +85,46 @@ async fn main(_spawner: Spawner) -> ! {
     // Feed watchdog timer regularly
     wdt0.feed();
 
-    // Read joystick values (raw millivolts and normalized -1.0..1.0)
-    let reading = joystick.read();
-
-    // Toggle heartbeat LED every ~1 second (every 10 ticks at 100ms)
-    tick_counter = tick_counter.wrapping_add(1);
-    if tick_counter % 10 == 0 {
-      led_state = !led_state;
-      led.set_level(if led_state { Level::High } else { Level::Low });
+    // Check for Joystick Switch Button press on Pin 13
+    if switch_button.update_just_pressed() {
+      let new_mode = joystick.toggle_mode();
+      info!(">>> MODE SWITCH: Active Joystick changed to {} <<<", new_mode.label());
     }
 
-    // Output joystick values to serial console in human-readable format
-    info!(
-      "Joystick | X: {:>5.2} (raw: {:>4} mV) | Y: {:>5.2} (raw: {:>4} mV) | Z: {:>5.2} (raw: {:>4} mV)",
-      reading.x, reading.raw_x_mv,
-      reading.y, reading.raw_y_mv,
-      reading.z, reading.raw_z_mv,
-    );
+    // Scan matrix keypad and handle press/release events
+    let key_events = keypad.update();
+    for event in key_events {
+      match event {
+        KeyEvent::Pressed { row, col, key, .. } => {
+          info!("Key PRESSED:  '{}' [Row {}, Col {}]", key, row, col);
+        }
+        KeyEvent::Released { row, col, key, .. } => {
+          info!("Key RELEASED: '{}' [Row {}, Col {}]", key, row, col);
+        }
+      }
+    }
 
-    Timer::after(Duration::from_millis(100)).await;
+    // Periodic joystick logging (every 100ms / 5 ticks at 20ms)
+    tick_counter = tick_counter.wrapping_add(1);
+    if tick_counter % 5 == 0 {
+      let dual = joystick.read_dual();
+      match dual.active {
+        ActiveJoystick::Joystick1 => {
+          info!(
+            "[J1 *ACTIVE*] X:{:>5.2} Y:{:>5.2} Z:{:>5.2} | [J2  idle  ] X: 0.00 Y: 0.00 Z: 0.00",
+            dual.joy1.x, dual.joy1.y, dual.joy1.z,
+          );
+        }
+        ActiveJoystick::Joystick2 => {
+          info!(
+            "[J1  idle  ] X: 0.00 Y: 0.00 Z: 0.00 | [J2 *ACTIVE*] X:{:>5.2} Y:{:>5.2} Z:{:>5.2}",
+            dual.joy2.x, dual.joy2.y, dual.joy2.z,
+          );
+        }
+      }
+    }
+
+    Timer::after(Duration::from_millis(20)).await;
   }
 }
 

@@ -99,7 +99,11 @@ Be mindful when assigning the following pins as they affect chip boot modes:
 - **GPIO3**: JTAG strap
 
 ### ESP32-S3 Super-Mini Pinout Highlights
-- **Onboard LED**: `GPIO 8`
+- **Joystick**: `X = GPIO 1`, `Y = GPIO 2`, `Z = GPIO 4` (ADC1 Channels 0, 1, 3)
+- **Joystick Mode Switch Button**: `GPIO 13` (Active-Low mit internem Pull-Up, schaltet J1 <-> J2)
+- **4x4 Keypad Matrix**:
+  - **Rows (Outputs)**: `GPIO 5`, `GPIO 6`, `GPIO 7`, `GPIO 8`
+  - **Columns (Inputs)**: `GPIO 9`, `GPIO 10`, `GPIO 11`, `GPIO 12`
 - **Native USB-JTAG/Serial**: `GPIO 19` (D-) / `GPIO 20` (D+)
 
 ---

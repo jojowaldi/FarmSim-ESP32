@@ -3,4 +3,5 @@
 extern crate alloc;
 
 pub mod joystick;
+pub mod matrix;
 pub mod utils;

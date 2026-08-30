@@ -1,17 +1,16 @@
-# Universal Rust ESP32-S3 Super-Mini Project Template (Embassy Async + no_std)
+# ESP32-S3 USB HID Gamepad Controller (Embassy Async + no_std)
 
-A production-ready, universal project template for building asynchronous firmware in **Rust** (`no_std`) for the **Espressif ESP32-S3 / ESP32-S3 Super-Mini** (Dual-Core Xtensa LX7 @ 240 MHz), powered by the **Embassy async runtime**, **ESP-HAL / ESP-RTOS**, and **defmt RTT logging**.
+A high-performance, asynchronous **USB HID Gamepad Controller** firmware in **Rust** (`no_std`) for the **Espressif ESP32-S3 / ESP32-S3 Super-Mini**, powered by **Embassy async runtime**, **ESP-HAL / ESP-RTOS**, and **embassy-usb**.
 
 ---
 
 ## 📋 Features & Architecture
 
-- ⚡ **Asynchronous Runtime**: Full `embassy-executor` + `esp-rtos` scheduler integration.
-- 🪵 **Defmt + RTT Logging**: Ultra-fast, tokenized structured logging via JTAG / native USB-Serial-JTAG (`panic-rtt-target`, `rtt-target`).
-- 🛡️ **Reliability & Watchdog**: Main Watchdog Timer (MWDT) setup & periodic feeding patterns.
-- 🛠️ **Memory Utilities**: Safe static cell allocation macros (`mk_static!`) for Embassy task memory reuse.
-- 💡 **On-Board LED**: Preconfigured on **GPIO 8** (standard for ESP32-S3 Super-Mini).
-- ⚙️ **Barebones & Modular**: Minimal baseline for quick adaptation to any peripheral or networking stack.
+- 🎮 **Native USB HID Gamepad**: Plug-and-play USB Gamepad recognized natively on Windows, Linux, and macOS without drivers.
+- 🕹️ **Dual-Mode 3-Axis Joystick**: X, Y, and Z axes with toggleable virtual joystick banks (**J1**: X/Y/Z vs **J2**: Rx/Ry/Rz) via Pin 13 button.
+- 🖲️ **16 Generic Gamepad Buttons**: 4x4 Matrix Keypad with anti-ghosting diode support and debouncing, mapped to standard Buttons 1..16.
+- ⚡ **200 Hz High-Speed Polling**: Ultra-low latency 5ms report updates over USB HID.
+- ⚙️ **Automatic Boot Calibration**: Factory eFuse ADC curve calibration + automatic rest-position zero-point calibration at startup.
 
 ---
 

@@ -34,6 +34,7 @@ embassy-executor = { version = "0.10.0" }
 embassy-time = { version = "0.5.0" }
 embassy-sync = "0.8.0"
 embassy-futures = "0.1.2"
+embassy-usb = { version = "0.5.0" }
 
 # Embedded HAL & IO
 embedded-hal = "1.0.0"

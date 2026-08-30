@@ -10,25 +10,34 @@ extern crate alloc;
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
+use embassy_usb::{Builder, Config as UsbConfig, UsbDevice};
+use embassy_usb::class::hid::{Config as HidConfig, HidWriter, State as HidState};
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
+use esp_hal::otg_fs::{asynch::Config as OtgConfig, asynch::Driver, Usb};
 use esp_hal::peripherals::Peripherals;
 use esp_hal::timer::timg::{MwdtStage, TimerGroup};
-use log::info;
 use esp32s3_template::{
-  joystick::{ActiveJoystick, DebouncedButton, Joystick},
-  matrix::{KeyEvent, MatrixKeypad4x4},
+  gamepad::{GamepadReport, GAMEPAD_REPORT_DESCRIPTOR},
+  joystick::{DebouncedButton, Joystick},
+  matrix::MatrixKeypad4x4,
+  mk_static,
 };
 
 // App descriptor required by esp-idf bootloader
 esp_bootloader_esp_idf::esp_app_desc!();
 
+#[embassy_executor::task]
+async fn usb_task(mut usb: UsbDevice<'static, Driver<'static>>) {
+  usb.run().await;
+}
+
 #[allow(
   clippy::large_stack_frames,
-  reason = "Main entry point may allocate initialization buffers"
+  reason = "Main entry point allocates static USB buffers and driver instances"
 )]
 #[esp_rtos::main]
-async fn main(_spawner: Spawner) -> ! {
+async fn main(spawner: Spawner) -> ! {
   let peripherals = init();
 
   // Initialize Embassy RTOS scheduler with TimerGroup 0
@@ -37,8 +46,6 @@ async fn main(_spawner: Spawner) -> ! {
   let sw_interrupt =
     esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
   esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
-
-  info!("ESP32-S3 Embassy Runtime initialized!");
 
   // Main Watchdog Timer (MWDT) setup
   wdt0.enable();
@@ -53,18 +60,10 @@ async fn main(_spawner: Spawner) -> ! {
   );
 
   // Calibrate joystick center in rest mode (64 samples)
-  info!("Calibrating joystick center (keep joystick at rest)...");
   joystick.calibrate_center(64);
-  info!(
-    "Joystick calibrated! Centers: X={} mV, Y={} mV, Z={} mV",
-    joystick.config.x.center_mv,
-    joystick.config.y.center_mv,
-    joystick.config.z.center_mv,
-  );
 
   // Initialize Mode Switch Button on GPIO 13 (with internal Pull-Up to GND)
   let mut switch_button = DebouncedButton::new_pullup(peripherals.GPIO13);
-  info!("Joystick Switch Button initialized on GPIO 13 (Press to toggle J1 <-> J2)");
 
   // Initialize 4x4 Matrix Keypad (Rows: 5,6,7,8 | Cols: 9,10,11,12)
   let mut keypad = MatrixKeypad4x4::new(
@@ -77,61 +76,82 @@ async fn main(_spawner: Spawner) -> ! {
     peripherals.GPIO11,
     peripherals.GPIO12,
   );
-  info!("4x4 Matrix Keypad initialized (Rows: 5, 6, 7, 8 | Cols: 9, 10, 11, 12)");
 
-  let mut tick_counter: u32 = 0;
+  // Static buffers for USB OTG and HID Gamepad
+  let ep_out_buffer = mk_static!([u8; 256], [0u8; 256]);
+  let config_descriptor = mk_static!([u8; 256], [0u8; 256]);
+  let bos_descriptor = mk_static!([u8; 256], [0u8; 256]);
+  let msos_descriptor = mk_static!([u8; 256], [0u8; 256]);
+  let control_buf = mk_static!([u8; 64], [0u8; 64]);
+  let hid_state = mk_static!(HidState, HidState::new());
+
+  // Initialize USB OTG peripheral on native USB pins (DP=GPIO20, DM=GPIO19)
+  let usb_peri = Usb::new(peripherals.USB0, peripherals.GPIO20, peripherals.GPIO19);
+  let usb_driver = Driver::new(usb_peri, ep_out_buffer, OtgConfig::default());
+
+  // USB Device configuration (Generic Gamepad)
+  let mut usb_config = UsbConfig::new(0x1209, 0x2001);
+  usb_config.manufacturer = Some("FarmStick");
+  usb_config.product = Some("FarmStick Gamepad Controller");
+  usb_config.serial_number = Some("FS-0001");
+  usb_config.max_power = 100;
+  usb_config.max_packet_size_0 = 64;
+
+  let mut builder = Builder::new(
+    usb_driver,
+    usb_config,
+    config_descriptor,
+    bos_descriptor,
+    msos_descriptor,
+    control_buf,
+  );
+
+  // USB HID Gamepad configuration (200Hz polling rate)
+  let hid_config = HidConfig {
+    report_descriptor: GAMEPAD_REPORT_DESCRIPTOR,
+    request_handler: None,
+    poll_ms: 5,
+    max_packet_size: 64,
+  };
+
+  let mut writer = HidWriter::<_, 8>::new(&mut builder, hid_state, hid_config);
+  let usb_device = builder.build();
+
+  // Spawn background USB device task
+  spawner.spawn(usb_task(usb_device).unwrap());
+
+  // Wait until USB endpoint is enabled by host
+  writer.ready().await;
 
   loop {
     // Feed watchdog timer regularly
     wdt0.feed();
 
-    // Check for Joystick Switch Button press on Pin 13
+    // 1. Check for Joystick Switch Button press on Pin 13 (toggles J1 <-> J2)
     if switch_button.update_just_pressed() {
-      let new_mode = joystick.toggle_mode();
-      info!(">>> MODE SWITCH: Active Joystick changed to {} <<<", new_mode.label());
+      joystick.toggle_mode();
     }
 
-    // Scan matrix keypad and handle press/release events
-    let key_events = keypad.update();
-    for event in key_events {
-      match event {
-        KeyEvent::Pressed { row, col, key, .. } => {
-          info!("Key PRESSED:  '{}' [Row {}, Col {}]", key, row, col);
-        }
-        KeyEvent::Released { row, col, key, .. } => {
-          info!("Key RELEASED: '{}' [Row {}, Col {}]", key, row, col);
-        }
-      }
-    }
+    // 2. Scan 4x4 matrix keypad to update debounced key states (16 buttons)
+    let _ = keypad.update();
+    let buttons_bitmask = keypad.debounced_state();
 
-    // Periodic joystick logging (every 100ms / 5 ticks at 20ms)
-    tick_counter = tick_counter.wrapping_add(1);
-    if tick_counter % 5 == 0 {
-      let dual = joystick.read_dual();
-      match dual.active {
-        ActiveJoystick::Joystick1 => {
-          info!(
-            "[J1 *ACTIVE*] X:{:>5.2} Y:{:>5.2} Z:{:>5.2} | [J2  idle  ] X: 0.00 Y: 0.00 Z: 0.00",
-            dual.joy1.x, dual.joy1.y, dual.joy1.z,
-          );
-        }
-        ActiveJoystick::Joystick2 => {
-          info!(
-            "[J1  idle  ] X: 0.00 Y: 0.00 Z: 0.00 | [J2 *ACTIVE*] X:{:>5.2} Y:{:>5.2} Z:{:>5.2}",
-            dual.joy2.x, dual.joy2.y, dual.joy2.z,
-          );
-        }
-      }
-    }
+    // 3. Read physical joystick
+    let joy_reading = joystick.read();
 
-    Timer::after(Duration::from_millis(20)).await;
+    // 4. Build HID Gamepad report
+    let report = GamepadReport::new(joystick.active_mode(), joy_reading, buttons_bitmask);
+
+    // 5. Send report over USB HID
+    let _ = writer.write(&report.to_bytes()).await;
+
+    // 5ms interval = 200 Hz update rate
+    Timer::after(Duration::from_millis(5)).await;
   }
 }
 
-/// Initializes serial logger, CPU clock and 64KB heap allocator.
+/// Initializes CPU clock and 64KB heap allocator.
 fn init() -> Peripherals {
-  esp_println::logger::init_logger_from_env();
-
   let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
   let peripherals = esp_hal::init(config);
 
@@ -140,3 +160,4 @@ fn init() -> Peripherals {
 
   peripherals
 }
+

@@ -1,0 +1,50 @@
+[package]
+name = "esp-c6-template"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+
+[[bin]]
+name = "esp-c6-template"
+path = "./src/bin/main.rs"
+
+[dependencies]
+# ESP-HAL & RTOS ecosystem
+esp-hal = { version = "~1.1.0", features = ["defmt", "esp32c6", "unstable"] }
+esp-rtos = { version = "0.3.0", features = [
+  "defmt",
+  "embassy",
+  "esp-alloc",
+  "esp32c6"
+] }
+esp-bootloader-esp-idf = { version = "0.5.0", features = ["defmt", "esp32c6"] }
+esp-alloc = { version = "0.10.0", features = ["defmt"] }
+
+# Logging & Panics
+defmt = "1.0.1"
+panic-rtt-target = { version = "0.2.0", features = ["defmt"] }
+rtt-target = { version = "0.6.2", features = ["defmt"] }
+
+# Async Runtime & Embassy Ecosystem
+embassy-executor = { version = "0.10.0", features = ["defmt"] }
+embassy-time = { version = "0.5.0", features = ["defmt"] }
+embassy-sync = "0.8.0"
+embassy-futures = "0.1.2"
+
+# Embedded HAL & IO
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+static_cell = "2.1.1"
+critical-section = "1.2.0"
+heapless = "0.9.3"
+
+# Optimization profiles for microcontrollers
+[profile.dev]
+# Keep size small and enable optimizations even in debug builds
+opt-level = "s"
+
+[profile.release]
+opt-level = "s"
+debug = 2          # Retain debug symbols for probe-rs / defmt
+lto = "fat"        # Full link-time optimization
+codegen-units = 1  # Best optimization at the cost of compile time

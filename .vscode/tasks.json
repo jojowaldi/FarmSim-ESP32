@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-debug",
+      "command": "cargo build",
+      "type": "shell"
+    },
+    {
+      "label": "build-release",
+      "command": "cargo build --release",
+      "type": "shell"
+    },
+    {
+      "label": "run",
+      "command": "cargo run",
+      "type": "shell"
+    }
+  ]
+}

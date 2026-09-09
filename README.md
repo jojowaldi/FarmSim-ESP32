@@ -137,6 +137,6 @@ wdt0.feed();
 ---
 
 ## 📄 License
-Licensed under either Apache License, Version 2.0 or MIT License at your option.
+Licensed under Apache License, Version 2.0
 
 

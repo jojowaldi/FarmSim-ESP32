@@ -927,7 +927,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "esp32s3-template"
+name = "esp32s3-farmstick"
 version = "0.1.0"
 dependencies = [
  "critical-section",

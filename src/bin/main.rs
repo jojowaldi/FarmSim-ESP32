@@ -17,7 +17,7 @@ use esp_hal::clock::CpuClock;
 use esp_hal::otg_fs::{asynch::Config as OtgConfig, asynch::Driver, Usb};
 use esp_hal::peripherals::Peripherals;
 use esp_hal::timer::timg::{MwdtStage, TimerGroup};
-use esp32s3_template::{
+use esp32s3_farmstick::{
   gamepad::{GamepadReport, GAMEPAD_REPORT_DESCRIPTOR},
   joystick::{DebouncedButton, Joystick},
   matrix::MatrixKeypad4x4,

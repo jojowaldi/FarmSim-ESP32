@@ -17,7 +17,7 @@ A high-performance, asynchronous **USB HID Gamepad Controller** firmware in **Ru
 ## 🗂️ Project Structure
 
 ```text
-template/
+/
 ├── .cargo/
 │   └── config.toml          # Target xtensa-esp32s3-none-elf, probe-rs runner, defmt env
 ├── .vscode/
@@ -83,7 +83,7 @@ You will immediately see real-time `defmt` log output in your terminal!
 
 #### Using `espflash`
 ```bash
-espflash flash --chip esp32s3 --monitor target/xtensa-esp32s3-none-elf/debug/esp32s3-template
+espflash flash --chip esp32s3 --monitor target/xtensa-esp32s3-none-elf/debug/esp32s3-farmstick
 ```
 
 ---
@@ -112,7 +112,7 @@ Be mindful when assigning the following pins as they affect chip boot modes:
 ### 1. Static Allocation for Embassy Tasks (`mk_static!`)
 Embassy tasks require `'static` lifetimes for references. Use the provided macros in `src/utils.rs`:
 ```rust
-use esp32s3_template::mk_static;
+use esp32s3_farmstick::mk_static;
 
 let buffer = mk_static!([u8; 1024], [0u8; 1024]);
 ```

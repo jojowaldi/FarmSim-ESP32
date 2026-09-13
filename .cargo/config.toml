@@ -1,6 +1,6 @@
 [target.xtensa-esp32s3-none-elf]
 runner = "espflash flash --monitor"
-linker = "C:\\Users\\Johannes\\.rustup\\toolchains\\esp\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-gcc.exe"
+linker = "xtensa-esp32s3-elf-gcc"
 
 [env]
 ESP_LOG = "INFO"

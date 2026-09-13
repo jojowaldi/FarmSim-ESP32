@@ -1,4 +1,4 @@
-﻿use crate::joystick::{ActiveJoystick, JoystickReading};
+use crate::joystick::{ActiveJoystick, JoystickReading};
 
 /// Standard USB HID Gamepad Report Descriptor.
 ///
@@ -9,7 +9,7 @@
 #[rustfmt::skip]
 pub const GAMEPAD_REPORT_DESCRIPTOR: &[u8] = &[
   0x05, 0x01,        // Usage Page (Generic Desktop)
-  0x09, 0x05,        // Usage (Game Pad)
+  0x09, 0x04,        // Usage (Joystick)
   0xA1, 0x01,        // Collection (Application)
   
   // 16 Buttons (Buttons 1..16)

@@ -244,13 +244,23 @@ where
   pub fn read(&mut self) -> JoystickReading {
     let (raw_x, raw_y, raw_z) = self.read_raw_mv_averaged(4);
 
+    let norm_x = self.config.x.normalize(raw_x);
+    let norm_y = self.config.y.normalize(raw_y);
+    let norm_z = self.config.z.normalize(raw_z);
+
+    // Orientation correction for 90-degree mounted joystick:
+    // Physical UP was producing X = +1, DOWN produced X = -1
+    // Physical RIGHT was producing Y = -1, LEFT produced Y = +1
+    // Correct mapping:
+    // X (Left/Right) = -norm_y
+    // Y (Up/Down)    = norm_x
     JoystickReading {
       raw_x_mv: raw_x,
       raw_y_mv: raw_y,
       raw_z_mv: raw_z,
-      x: self.config.x.normalize(raw_x),
-      y: self.config.y.normalize(raw_y),
-      z: self.config.z.normalize(raw_z),
+      x: -norm_y,
+      y: norm_x,
+      z: norm_z,
     }
   }
 
@@ -291,6 +301,17 @@ pub struct DebouncedButton<'a> {
   active_low: bool,
 }
 
+/// Edge transitions of a debounced push button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ButtonEdge {
+  /// No state change.
+  None,
+  /// Button transitioned from unpressed to pressed (rising edge).
+  Pressed,
+  /// Button transitioned from pressed to unpressed (falling edge).
+  Released,
+}
+
 impl<'a> DebouncedButton<'a> {
   /// Creates a new active-low button with internal Pull-Up (e.g. Button to GND).
   pub fn new_pullup(pin: impl esp_hal::gpio::InputPin + 'a) -> Self {
@@ -316,8 +337,8 @@ impl<'a> DebouncedButton<'a> {
     }
   }
 
-  /// Scans the button and returns `true` on the rising edge of a button press (just pressed).
-  pub fn update_just_pressed(&mut self) -> bool {
+  /// Scans the button and returns the edge transition (`Pressed`, `Released`, or `None`).
+  pub fn update(&mut self) -> ButtonEdge {
     let raw_pressed = if self.active_low {
       self.pin.is_low()
     } else {
@@ -330,14 +351,21 @@ impl<'a> DebouncedButton<'a> {
         self.counter = 0;
         self.is_pressed = raw_pressed;
         if self.is_pressed {
-          return true;
+          return ButtonEdge::Pressed;
+        } else {
+          return ButtonEdge::Released;
         }
       }
     } else {
       self.counter = 0;
     }
 
-    false
+    ButtonEdge::None
+  }
+
+  /// Scans the button and returns `true` on the rising edge of a button press (just pressed).
+  pub fn update_just_pressed(&mut self) -> bool {
+    self.update() == ButtonEdge::Pressed
   }
 
   /// Returns whether the button is currently held down.
